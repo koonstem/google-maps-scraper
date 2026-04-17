@@ -2,83 +2,88 @@ package main
 
 import (
 	"context"
-	"errors"
+	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/gosom/google-maps-scraper/runner"
-	"github.com/gosom/google-maps-scraper/runner/databaserunner"
-	"github.com/gosom/google-maps-scraper/runner/filerunner"
-	"github.com/gosom/google-maps-scraper/runner/installplaywright"
-	"github.com/gosom/google-maps-scraper/runner/lambdaaws"
-	"github.com/gosom/google-maps-scraper/runner/webrunner"
+	"github.com/gosom/google-maps-scraper/scraper"
+)
+
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func main() {
+	var (
+		inputFile   string
+		outputFile  string
+		concurrency int
+		depth       int
+		lang        string
+		geoCoords   string
+		zoom        int
+		webServer   bool
+		webAddr     string
+		printVersion bool
+	)
+
+	flag.StringVar(&inputFile, "input", "", "path to input file with search queries (one per line)")
+	flag.StringVar(&outputFile, "output", "", "path to output CSV file (default: stdout)")
+	flag.IntVar(&concurrency, "concurrency", 1, "number of concurrent scrapers")
+	flag.IntVar(&depth, "depth", 10, "max depth of results per query")
+	flag.StringVar(&lang, "lang", "en", "language code for Google Maps (e.g. en, de, fr)")
+	flag.StringVar(&geoCoords, "geo", "", "geo coordinates for search bias (e.g. '37.7749,-122.4194')")
+	flag.IntVar(&zoom, "zoom", 15, "zoom level for map (1-21)")
+	flag.BoolVar(&webServer, "web", false, "start web server for job management")
+	flag.StringVar(&webAddr, "web-addr", ":8080", "address for web server to listen on")
+	flag.BoolVar(&printVersion, "version", false, "print version information and exit")
+	flag.Parse()
+
+	if printVersion {
+		fmt.Printf("google-maps-scraper version=%s commit=%s date=%s\n", version, commit, date)
+		os.Exit(0)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	runner.Banner()
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
+	// Handle OS signals for graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-sigChan
-
-		log.Println("Received signal, shutting down...")
-
+		<-sigCh
+		fmt.Fprintln(os.Stderr, "received shutdown signal, stopping...")
 		cancel()
 	}()
 
-	cfg := runner.ParseConfig()
-
-	runnerInstance, err := runnerFactory(cfg)
-	if err != nil {
-		cancel()
-		os.Stderr.WriteString(err.Error() + "\n")
-
-		runner.Telemetry().Close()
-
-		os.Exit(1)
+	cfg := scraper.Config{
+		InputFile:   inputFile,
+		OutputFile:  outputFile,
+		Concurrency: concurrency,
+		Depth:       depth,
+		Lang:        lang,
+		GeoCoords:   geoCoords,
+		Zoom:        zoom,
+		WebServer:   webServer,
+		WebAddr:     webAddr,
 	}
 
-	if err := runnerInstance.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		os.Stderr.WriteString(err.Error() + "\n")
-
-		_ = runnerInstance.Close(ctx)
-		runner.Telemetry().Close()
-
-		cancel()
-
+	if err := run(ctx, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-
-	_ = runnerInstance.Close(ctx)
-	runner.Telemetry().Close()
-
-	cancel()
-
-	os.Exit(0)
 }
 
-func runnerFactory(cfg *runner.Config) (runner.Runner, error) {
-	switch cfg.RunMode {
-	case runner.RunModeFile:
-		return filerunner.New(cfg)
-	case runner.RunModeDatabase, runner.RunModeDatabaseProduce:
-		return databaserunner.New(cfg)
-	case runner.RunModeInstallPlaywright:
-		return installplaywright.New(cfg)
-	case runner.RunModeWeb:
-		return webrunner.New(cfg)
-	case runner.RunModeAwsLambda:
-		return lambdaaws.New(cfg)
-	case runner.RunModeAwsLambdaInvoker:
-		return lambdaaws.NewInvoker(cfg)
-	default:
-		return nil, fmt.Errorf("%w: %d", runner.ErrInvalidRunMode, cfg.RunMode)
+func run(ctx context.Context, cfg scraper.Config) error {
+	app, err := scraper.New(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize scraper: %w", err)
 	}
+	defer app.Close()
+
+	return app.Run(ctx)
 }
