@@ -32,6 +32,7 @@ ENV PLAYWRIGHT_DRIVER_PATH=/opt
 ENV USER=scraper
 
 # Install only the necessary dependencies in a single layer
+# Note: libasound2 may need to be libasound2t64 on newer debian releases
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libnss3 \
@@ -52,7 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgbm1 \
     libpango-1.0-0 \
     libcairo2 \
-    libasound2 \
+    libasound2t64 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/sh scraper
