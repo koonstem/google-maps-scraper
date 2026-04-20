@@ -26,3 +26,6 @@
 
 ## Personal Notes
 - When experimenting locally, use `-depth 1` to limit scrape depth and avoid long-running runs during testing
+- Use `-c 2` (concurrency 2) during local dev to keep CPU/network usage low
+- Useful one-liner for quick local test: `go run main.go -input testdata/input.txt -depth 1 -c 2 -output /tmp/out.csv`
+- Remember to check `/tmp/out.csv` output after runs to sanity-check field names before changing struct tags
