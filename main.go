@@ -33,7 +33,8 @@ func main() {
 
 	flag.StringVar(&inputFile, "input", "", "path to input file with search queries (one per line)")
 	flag.StringVar(&outputFile, "output", "", "path to output CSV file (default: stdout)")
-	flag.IntVar(&concurrency, "concurrency", 1, "number of concurrent scrapers")
+	// bumped default concurrency from 1 to 3 for faster scraping on my machine
+	flag.IntVar(&concurrency, "concurrency", 3, "number of concurrent scrapers")
 	flag.IntVar(&depth, "depth", 10, "max depth of results per query")
 	flag.StringVar(&lang, "lang", "en", "language code for Google Maps (e.g. en, de, fr)")
 	flag.StringVar(&geoCoords, "geo", "", "geo coordinates for search bias (e.g. '37.7749,-122.4194')")
